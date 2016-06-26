@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Spyder Editor
-# a script to go into an Alexa skill
+
+# a script to go into an Alexa skill via amazon lambda
 # the skill will allow me to ask Alexa when my buses are coming
 # it will poll the 63, 64, 70, and 79 southbound to start
 # it will then report the first several 
@@ -42,8 +42,7 @@ def lambda_handler(event, context):
     #     raise ValueError("Invalid Application ID")
 
     if event['session']['new']:
-        on_session_started({'requestId': event['request']['requestId']},
-                           event['session'])
+        on_session_started({'requestId': event['request']['requestId']}, event['session'])
 
     if event['request']['type'] == "LaunchRequest":
         return on_launch(event['request'], event['session'])
@@ -72,9 +71,7 @@ def on_launch(launch_request, session):
 
 
 def on_intent(intent_request, session):
-    """ Called when the user specifies an intent for this skill 
-    Keeping this in but not using it - I might eventually use it to
-    let users (me?) pick a route or direction or something    
+    """ Called when the user specifies an intent for this skill     
     """
 
     print("on_intent requestId=" + intent_request['requestId'] +
@@ -83,21 +80,30 @@ def on_intent(intent_request, session):
     intent = intent_request['intent']
     intent_name = intent_request['intent']['name']
 
-    """
+    
     # Dispatch to your skill's intent handlers
-    if intent_name == "MyColorIsIntent":
-        return set_color_in_session(intent, session)
-    elif intent_name == "WhatsMyColorIntent":
-        return get_color_from_session(intent, session)
-    elif intent_name == "AMAZON.HelpIntent":
-        return get_welcome_response()
-    elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
-        return handle_session_end_request()
+    if intent_name == "North":
+        # stoplist is a set of stop, route pairs. It will get only the route
+        # of interest from each stop, so to get multiple, add multiple
+        # entries for each stop
+        stoplist = [[1001914,'63'],[1001929,'64'], [1002006,'79'],[1001939,'70'],[1002008,'H8']]
+        session_attributes = {}
+        card_title = "Intent: North"
+        speech_output = get_speech(stoplist, "Northbound")
+         # If the user either does not replay to the welcome message or says something
+        # that is not understood, they will be prompted again with this text.
+        reprompt_text = "I don't think this should be read..."
+        should_end_session = True
+        return build_response(session_attributes, build_speechlet_response(
+            card_title, speech_output, reprompt_text, should_end_session))
+    #elif intent_name == "WhatsMyColorIntent":
+    #    return get_color_from_session(intent, session)
+    #elif intent_name == "AMAZON.HelpIntent":
+    #    return get_welcome_response()
+    #elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
+    #    return handle_session_end_request()
     else:
         raise ValueError("Invalid intent")
-    """
-    
-    raise ValueError("Invalid intent")
 
 def on_session_ended(session_ended_request, session):
     """ Called when the user ends the session.
@@ -112,16 +118,34 @@ def get_welcome_response():
     """ If we wanted to initialize the session to have some attributes we could
     add those here
     """
+    
+    """
+    define the stop IDs and routes to poll
+     63 south at sherman and girard
+    1001930
+     64 south at 11th and Harvard
+    1003048
+     70 south at Georgia and Gresham
+    1001948
+     79 south at Georgia and Columbia
+    1001986 
+    """
+    
+    # stoplist is a set of stop, route pairs. It will get only the route
+    # of interest from each stop, so to get multiple, add multiple
+    # entries for each stop
+    stoplist = [[1001930,'63'],[1003048,'64'], [1001986,'79'],[1001986,'70']]
 
     session_attributes = {}
     card_title = "Welcome"
-    speech_output = get_speech()
+    speech_output = get_speech(stoplist, "")
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
     reprompt_text = "I don't think this should be read..."
     should_end_session = True
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
+
 
 # --------------- Helpers that build all of the responses ----------------------
 
@@ -154,6 +178,9 @@ def build_response(session_attributes, speechlet_response):
         'response': speechlet_response
     }
 
+# --------------- WMATA Functions ----------------------
+
+
 # next bus prediction API
 def NBP(StopID = ''):
     headers = {
@@ -178,31 +205,20 @@ def NBP(StopID = ''):
         print("[Errno {0}] {1}".format(e.errno, e.strerror))
     return data
 
-def get_speech():
-    session_attributes = {}
-    reprompt_text = None
+# custom get speech function
+
+def get_speech(stoplist=[], identifier=""):
     
-    # define the stop IDs to poll
-    # 63 south at sherman and girard
-    #1001930
-    # 64 south at 11th and Harvard
-    #1003048
-    # 70 south at Georgia and Gresham
-    #1001948
-    # 79 south at Georgia and Columbia
-    #1001986 
-
-    stoplist = [1001930, 1003048, 1001986]
-    routelist = [63, 64, 70, 79]
-
     # get all predictions from each stop, build into a small data frame
     # data frame contains pairs of route name and arrival times
     pred = []
     for stop in stoplist:
         # grab next bus predictions for the stop
-        stopdata = json.loads(NBP(str(int(stop))))['Predictions']
+        stopdata = json.loads(NBP(str(int(stop[0]))))['Predictions']
         # go through each prediction for this stop and grab the minutes and the route
-        pred += [(item['Minutes'], item['RouteID']) for item in stopdata]        
+        # keep only the ones with the right route
+        pred += [(item['Minutes'], item['RouteID']) for item in stopdata if item['RouteID']==stop[1]]    
+                
 
     # sort the dataframe by arrival time
     pred_sorted = sorted(pred, key=lambda pred: pred[0])
@@ -221,9 +237,8 @@ def get_speech():
             SeenRoutes.append(pred_sorted[i][1])
             pred_sifted.append(pred_sorted[i])
 
-        
     # loop to report each one
-    speech_output = "Upcoming bus arrivals: "
+    speech_output = "Upcoming bus arrivals" + identifier + ": "
     for row in pred_sifted:
         speech_output += "the " + str(row[1]) + " in " + str(row[0]) + ' minutes, '
      

@@ -1,0 +1,19 @@
+{
+  "intents": [
+    {
+      "intent": "WhenIsMyTrain"
+    },
+    {
+      "intent": "Rosslyn"
+    },
+   {
+      "intent": "AMAZON.HelpIntent"
+    },
+    {
+      "intent": "AMAZON.StopIntent"
+    },
+    {
+      "intent": "AMAZON.CancelIntent"
+    }
+  ]
+}
