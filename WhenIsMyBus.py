@@ -10,7 +10,7 @@
 
 from __future__ import print_function
 
-import httplib, urllib, urllib2, base64
+import http.client, urllib, base64
 import json
 
 
